@@ -3,6 +3,8 @@ package com.example.paskevich.sixhandstestapp1;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.opengl.Matrix;
+import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -10,6 +12,7 @@ import java.nio.FloatBuffer;
 
 import static android.opengl.GLES20.GL_CLAMP_TO_EDGE;
 import static android.opengl.GLES20.GL_COLOR_ATTACHMENT0;
+import static android.opengl.GLES20.GL_COLOR_BUFFER_BIT;
 import static android.opengl.GLES20.GL_FLOAT;
 import static android.opengl.GLES20.GL_FRAGMENT_SHADER;
 import static android.opengl.GLES20.GL_FRAMEBUFFER;
@@ -24,13 +27,13 @@ import static android.opengl.GLES20.GL_TEXTURE_MAG_FILTER;
 import static android.opengl.GLES20.GL_TEXTURE_MIN_FILTER;
 import static android.opengl.GLES20.GL_TEXTURE_WRAP_S;
 import static android.opengl.GLES20.GL_TEXTURE_WRAP_T;
-import static android.opengl.GLES20.GL_TRIANGLES;
 import static android.opengl.GLES20.GL_TRIANGLE_STRIP;
 import static android.opengl.GLES20.GL_UNSIGNED_BYTE;
 import static android.opengl.GLES20.GL_VERTEX_SHADER;
 import static android.opengl.GLES20.glBindFramebuffer;
 import static android.opengl.GLES20.glBindRenderbuffer;
 import static android.opengl.GLES20.glBindTexture;
+import static android.opengl.GLES20.glClear;
 import static android.opengl.GLES20.glDeleteTextures;
 import static android.opengl.GLES20.glDrawArrays;
 import static android.opengl.GLES20.glEnableVertexAttribArray;
@@ -43,6 +46,7 @@ import static android.opengl.GLES20.glGetUniformLocation;
 import static android.opengl.GLES20.glTexImage2D;
 import static android.opengl.GLES20.glTexParameteri;
 import static android.opengl.GLES20.glUniform4f;
+import static android.opengl.GLES20.glUniformMatrix4fv;
 import static android.opengl.GLES20.glUseProgram;
 import static android.opengl.GLES20.glVertexAttribPointer;
 
@@ -59,6 +63,10 @@ public class FboRenderer {
     private int oldTexId;
     private int fboTex;
 
+
+    private float[] mProjectionMatrix = new float[16];
+    private float[] mModelMatrix = new float[16];
+
     public FboRenderer(Context context){
         this.context = context;
     }
@@ -73,11 +81,11 @@ public class FboRenderer {
     private int texFbo = -1;
 
     private int aPositionLocation;
-    private int aTextureLocation;
-    private int uTextureUnitLocation;
+    //private int aTextureLocation;
+    //private int uTextureUnitLocation;
     private int uProjMatrixLocation;
     private int uModelMatrixLocation;
-    private int uViewMatrixLocation;
+    //private int uViewMatrixLocation;
     private int uColorLocation;
 
     protected void fboInit(int fboWidth, int fboHeight) {
@@ -123,7 +131,11 @@ public class FboRenderer {
         glUseProgram(programId);
         prepFBO();
         getLocations();
+        createProjectionMatrix(fboWidth, fboHeight);
+        //createModelMatrix(fbo);
         bindFboData();
+        bindMatrix();
+        glClear(GL_COLOR_BUFFER_BIT);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
         //changing to old
@@ -167,11 +179,11 @@ public class FboRenderer {
 
     protected void getLocations() {
         aPositionLocation = glGetAttribLocation(this.programId, "a_Position");
-       /* aTextureLocation = glGetAttribLocation(programId, "a_Texture");
+        //aTextureLocation = glGetAttribLocation(programId, "a_Texture");
         uProjMatrixLocation = glGetUniformLocation(programId, "u_ProjMatrix");
         uModelMatrixLocation = glGetUniformLocation(programId, "u_ModelMatrix");
-        uViewMatrixLocation = glGetUniformLocation(programId, "u_ViewMatrix");
-        uTextureUnitLocation = glGetUniformLocation(programId, "u_TextureUnit")*/;
+        //uViewMatrixLocation = glGetUniformLocation(programId, "u_ViewMatrix");
+        //uTextureUnitLocation = glGetUniformLocation(programId, "u_TextureUnit");
         uColorLocation = glGetUniformLocation(this.programId, "u_Color");
     }
 
@@ -181,6 +193,8 @@ public class FboRenderer {
         glEnableVertexAttribArray(aPositionLocation);
 
         glUniform4f(uColorLocation, 1.0f, 0.0f, 0.0f, 1.0f);
+
+
 
        /* texVertData.position(0);
         glVertexAttribPointer(aTextureLocation, 2,GL_FLOAT, false, 0, texVertData);
@@ -196,6 +210,52 @@ public class FboRenderer {
         int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.fragment_shader_fbo);
         programId = ShaderUtils.createProgram(vertexShaderId, fragmentShaderId);
         //glUseProgram(programId);
+    }
+
+    protected void createProjectionMatrix(int width, int height) {
+        float left = -1;
+        float right = 1;
+        float bottom = -1;
+        float top = 1;
+        float near = -12;
+        float far = 12;
+
+        float ratio;
+
+        if (width > height) {
+            ratio = (float) width / height;
+            left *= ratio;
+            right *= ratio;
+        } else {
+            ratio = (float) height / width;
+            bottom *= ratio;
+            top *= ratio;
+        }
+
+        Matrix.orthoM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
+    }
+
+    private void createModelMatrix(int wi, int hi, int ws, int hs) {
+        float scaling = 1;
+        float wideI = (float) wi / hi;
+        float wideS = (float) ws / hs;
+
+        Matrix.setIdentityM(mModelMatrix, 0);
+
+        if (wideI > wideS) {
+            scaling *= (float) hi / wi;
+            Log.d("MODEL MATRIX SCALING: ", "" + scaling);
+            Matrix.scaleM(mModelMatrix, 0, 1, scaling, 1);
+        } else {
+            scaling *= (float) wi / hi;
+            Log.d("MODEL MATRIX SCALING: ", "" + scaling);
+            Matrix.scaleM(mModelMatrix, 0, scaling, 1, 1);
+        }
+    }
+
+    private void bindMatrix() {
+        glUniformMatrix4fv(uProjMatrixLocation, 1, false, mProjectionMatrix, 0);
+        //glUniformMatrix4fv(uModelMatrixLocation, 1, false, mModelMatrix, 0);
     }
 
     public int getOldFbId() {

@@ -137,7 +137,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
 
         fboRenderer.fboInit(width, height);
 
-        glViewport(0,0, width, height);
+        glViewport(0, 0, width, height);
 
         if (bitmapImage != null) {
             //Log.d("QWERTY", "onSurfaceChanged: Image Width: " + bitmapImage.getWidth() + " Image Height: " + bitmapImage.getHeight());
@@ -148,7 +148,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
             bindData();
             createProjectionMatrix(width, height);
             createModelMatrix(bitmapImage.getWidth(), bitmapImage.getHeight(), width, height);
-            createViewMatrix(width, height);
+            //createViewMatrix(width, height);
             bindMatrix();
         }
     }
@@ -162,7 +162,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         if (bitmapImage != null) {
             glBindFramebuffer(GL_FRAMEBUFFER, fboRenderer.getOldFbId());
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            glDrawArrays(GL_TRIANGLE_STRIP, 0 ,4);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         } else {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         }
@@ -173,11 +173,18 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     }
 
     private void prepareData(int w, int h) {
-        float[] vertices = {
+        /*float[] vertices = {
                 -1, 1, 1, 0, 0,
                 1, 1, 1, 1, 0,
                 -1, -1, 1, 0, 1,
                 1, -1, 1, 1, 1,
+        };*/
+
+        float[] vertices = {
+                0, h, 1, 0, 0,
+                w, h, 1, 1, 0,
+                0, 0, 1, 0, 1,
+                w, 0, 1, 1, 1,
         };
         vertexData = ByteBuffer
                 .allocateDirect(vertices.length * 4)
@@ -200,10 +207,10 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         uViewMatrixLocation = glGetUniformLocation(programId, "u_ViewMatrix");
 
         //uncomment for another shaders
-        //uTextureUnitLocation = glGetUniformLocation(programId, "u_TextureUnit");
+        uTextureUnitLocation = glGetUniformLocation(programId, "u_TextureUnit");
 
-        uImageTexLocation = glGetUniformLocation(programId, "u_ImageTex");
-        uMaskTexLocation = glGetUniformLocation(programId, "u_MaskTex");
+        /*uImageTexLocation = glGetUniformLocation(programId, "u_ImageTex");
+        uMaskTexLocation = glGetUniformLocation(programId, "u_MaskTex");*/
     }
 
     private void bindData() {
@@ -221,21 +228,21 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         Log.d("WHAT HAPPENS: ", "TEXTURE WAS BINDED");
 
         //uncomment for another shaders
-        //glUniform1i(uTextureUnitLocation, 0);
+        glUniform1i(uTextureUnitLocation, 0);
 
-        glUniform1i(uImageTexLocation, 0);
+        /*glUniform1i(uImageTexLocation, 0);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, fboRenderer.getFboTex());
-        glUniform1i(uMaskTexLocation, 1);
+        glUniform1i(uMaskTexLocation, 1);*/
     }
 
     private void createProgram() {
-        /*int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vertex_shader);
-        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.fragment_shader);*/
-
         int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vertex_shader);
-        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.super_fragment_shader);
+        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.fragment_shader);
+
+        /*int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vertex_shader);
+        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.super_fragment_shader);*/
         programId = ShaderUtils.createProgram(vertexShaderId, fragmentShaderId);
         //glUseProgram(programId);
     }
@@ -244,7 +251,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     private void createProjectionMatrix(int width, int height) {
         Log.d("WhAt HaPpEnS: ", "pRoJeCtIoNs");
 
-        float left = -1;
+       /* float left = -1;
         float right = 1;
         float bottom = -1;
         float top = 1;
@@ -263,13 +270,13 @@ public class MyRenderer implements GLSurfaceView.Renderer {
             top *= ratio;
         }
 
-        Matrix.orthoM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
-        //Matrix.orthoM(mProjectionMatrix, 0, -width/2.0f, width/2.0f, -height/2.0f, height/2.0f, -1, 1);
-        //Matrix.orthoM(mProjectionMatrix, 0, 0, width, 0, height, -1, 1);
+        Matrix.orthoM(mProjectionMatrix, 0, left, right, bottom, top, near, far);*/
+        //Matrix.orthoM(mProjectionMatrix, 0, -width/2.0f, width/2.0f, -height/2.0f, height/2.0f, -12, 12);
+        Matrix.orthoM(mProjectionMatrix, 0, 0, width, 0, height, -12, 12);
     }
 
 
-    private void createViewMatrix(int w, int h) {
+    /*private void createViewMatrix(int w, int h) {
         float eyeX = 0;
         float eyeY = 0;
         float eyeZ = 7;
@@ -284,7 +291,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
 
         Matrix.setLookAtM(mViewMatrix, 0, eyeX, eyeY, eyeZ, centerX, centerY, centerZ, upX, upY, upZ);
         Log.d("VIEW MATRIX: ", logMatrix(mViewMatrix));
-    }
+    }*/
 
     private void createModelMatrix(int wi, int hi, int ws, int hs) {
         float scaling = 1;
@@ -294,20 +301,29 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         Matrix.setIdentityM(mModelMatrix, 0);
 
         if (wideI > wideS) {
-            scaling *= (float) hi / wi;
+            scaling *= (float) ws / wi;
             Log.d("MODEL MATRIX SCALING: ", "" + scaling);
             Matrix.scaleM(mModelMatrix, 0, 1, scaling, 1);
         } else {
-            scaling *= (float) wi / hi;
+            scaling *= (float) hs / hi;
             Log.d("MODEL MATRIX SCALING: ", "" + scaling);
             Matrix.scaleM(mModelMatrix, 0, scaling, 1, 1);
         }
+
+        /*float overviewScale = Math.min((float) ws / wi, (float) hs / hi);
+        float translationX = ws / 2.0f - (wi / 2.0f) * overviewScale;
+        float translationY = hs / 2.0f - (hi / 2.0f) * overviewScale;
+
+        // задаем матрицу модели
+        Matrix.setIdentityM(mModelMatrix, 0);
+        Matrix.translateM(mModelMatrix, 0, translationX, translationY, 0);
+        Matrix.scaleM(mModelMatrix, 0, overviewScale, overviewScale, 1.0f);*/
     }
 
     private void bindMatrix() {
         glUniformMatrix4fv(uProjMatrixLocation, 1, false, mProjectionMatrix, 0);
         glUniformMatrix4fv(uModelMatrixLocation, 1, false, mModelMatrix, 0);
-        glUniformMatrix4fv(uViewMatrixLocation, 1, false, mViewMatrix, 0);
+        //glUniformMatrix4fv(uViewMatrixLocation, 1, false, mViewMatrix, 0);
     }
 
     private String logMatrix(float[] m) {

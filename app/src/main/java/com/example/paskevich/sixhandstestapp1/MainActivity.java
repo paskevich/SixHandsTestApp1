@@ -68,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
         OnClickListener oclBtnOpen = new OnClickListener() {
             @Override
             public void onClick(View view) {
-                requestReadPermissions();
+                //requestReadPermissions();
                 Intent intent = new Intent(Intent.ACTION_PICK);
                 intent.setType("image/*");
                 startActivityForResult(intent, REQUEST_IMAGE);

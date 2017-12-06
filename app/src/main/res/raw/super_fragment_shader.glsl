@@ -1,3 +1,5 @@
+precision mediump float;
+
 uniform sampler2D u_ImageTex;
 uniform sampler2D u_MaskTex;
 
