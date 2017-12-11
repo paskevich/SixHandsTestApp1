@@ -4,55 +4,37 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.opengl.GLSurfaceView;
-import android.opengl.GLUtils;
 import android.opengl.Matrix;
+import android.support.annotation.RestrictTo;
 import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
-import static android.opengl.GLES20.GL_CLAMP_TO_EDGE;
-import static android.opengl.GLES20.GL_COLOR_ATTACHMENT0;
 import static android.opengl.GLES20.GL_COLOR_BUFFER_BIT;
 import static android.opengl.GLES20.GL_DEPTH_BUFFER_BIT;
 import static android.opengl.GLES20.GL_DEPTH_TEST;
 import static android.opengl.GLES20.GL_FLOAT;
 import static android.opengl.GLES20.GL_FRAGMENT_SHADER;
 import static android.opengl.GLES20.GL_FRAMEBUFFER;
-import static android.opengl.GLES20.GL_FRAMEBUFFER_BINDING;
-import static android.opengl.GLES20.GL_LINEAR;
-import static android.opengl.GLES20.GL_RENDERBUFFER;
-import static android.opengl.GLES20.GL_RENDERBUFFER_BINDING;
-import static android.opengl.GLES20.GL_RGBA;
 import static android.opengl.GLES20.GL_TEXTURE0;
-import static android.opengl.GLES20.GL_TEXTURE1;
 import static android.opengl.GLES20.GL_TEXTURE_2D;
-import static android.opengl.GLES20.GL_TEXTURE_MAG_FILTER;
-import static android.opengl.GLES20.GL_TEXTURE_MIN_FILTER;
-import static android.opengl.GLES20.GL_TEXTURE_WRAP_S;
-import static android.opengl.GLES20.GL_TEXTURE_WRAP_T;
-import static android.opengl.GLES20.GL_TRIANGLES;
 import static android.opengl.GLES20.GL_TRIANGLE_STRIP;
-import static android.opengl.GLES20.GL_UNSIGNED_BYTE;
 import static android.opengl.GLES20.GL_VERTEX_SHADER;
 import static android.opengl.GLES20.glActiveTexture;
 import static android.opengl.GLES20.glBindFramebuffer;
-import static android.opengl.GLES20.glBindRenderbuffer;
 import static android.opengl.GLES20.glBindTexture;
 import static android.opengl.GLES20.glClear;
 import static android.opengl.GLES20.glClearColor;
-import static android.opengl.GLES20.glCopyTexImage2D;
 import static android.opengl.GLES20.glDeleteTextures;
 import static android.opengl.GLES20.glDrawArrays;
 import static android.opengl.GLES20.glDrawElements;
 import static android.opengl.GLES20.glEnable;
 import static android.opengl.GLES20.glEnableVertexAttribArray;
-import static android.opengl.GLES20.glFramebufferTexture2D;
 import static android.opengl.GLES20.glGenFramebuffers;
 import static android.opengl.GLES20.glGenRenderbuffers;
 import static android.opengl.GLES20.glGenTextures;
@@ -60,13 +42,12 @@ import static android.opengl.GLES20.glGetAttribLocation;
 import static android.opengl.GLES20.glGetFramebufferAttachmentParameteriv;
 import static android.opengl.GLES20.glGetIntegerv;
 import static android.opengl.GLES20.glGetUniformLocation;
-import static android.opengl.GLES20.glTexImage2D;
-import static android.opengl.GLES20.glTexParameteri;
 import static android.opengl.GLES20.glUniform1i;
 import static android.opengl.GLES20.glUniformMatrix4fv;
 import static android.opengl.GLES20.glUseProgram;
 import static android.opengl.GLES20.glVertexAttribPointer;
 import static android.opengl.GLES20.glViewport;
+import static javax.microedition.khronos.opengles.GL10.GL_TEXTURE1;
 
 /**
  * Created by paskevich on 25.11.17.
@@ -98,7 +79,10 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     private int uImageTexLocation;
     private int uMaskTexLocation;
 
-    private int programId;
+    private int currProgramId;
+
+    private int maskModeProgramId;
+    private int allModeProgramId;
 
     private float[] mProjectionMatrix = new float[16];
     private float[] mModelMatrix = new float[16];
@@ -106,50 +90,45 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     private int height;
     private int width;
 
+    private boolean wasBitmapChanged;
+    private float scaling;
+    private float wideI;
+    private float wideS;
+
     public MyRenderer(Context context) {
         this.context = context;
+
+        fboRenderer = new FboRenderer(context);
     }
 
     @Override
     public void onSurfaceCreated(GL10 gl10, EGLConfig eglConfig) {
         fboBitmap = BitmapFactory.decodeResource(context.getResources(), R.drawable.innah);
-        glClearColor(0f, 1f, 1f, 1f);
+        glClearColor(0f, 0f, 0f, 1f);
         Log.d("Surface: ", "surface created");
         glEnable(GL_DEPTH_TEST);
 
         createProgram();
-        getLocations();
-
-        fboRenderer = new FboRenderer(context);
-
-        /*BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inScaled = false;
-
-        bitmapImage = BitmapFactory.decodeResource(context.getResources(), R.drawable.innah, options);*/
+        currProgramId = maskModeProgramId;
     }
 
     @Override
     public void onSurfaceChanged(GL10 gl10, int width, int height) {
         Log.d("Surface", "onSurfaceChanged: width: " + width + " height: " + height);
         //glViewport(0, 0, width, height);
+
         this.width = width;
         this.height = height;
-
-        fboRenderer.fboInit(width, height);
 
         glViewport(0, 0, width, height);
 
         if (bitmapImage != null) {
             //Log.d("QWERTY", "onSurfaceChanged: Image Width: " + bitmapImage.getWidth() + " Image Height: " + bitmapImage.getHeight());
-
+            if (wasBitmapChanged) {
+                fboRenderer.fboInit(width, height);
+            }
             glBindFramebuffer(GL_FRAMEBUFFER, fboRenderer.getOldFbId());
-            glUseProgram(programId);
             prepareData(width, height);
-            bindData();
-            createProjectionMatrix(width, height);
-            createModelMatrix(bitmapImage.getWidth(), bitmapImage.getHeight(), width, height);
-            //createViewMatrix(width, height);
-            bindMatrix();
         }
     }
 
@@ -160,7 +139,13 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         Log.d("Surface", "onDrawFrame: ");
 
         if (bitmapImage != null) {
+            glBindFramebuffer(GL_FRAMEBUFFER, fboRenderer.getFboId());
+            fboRenderer.drawObjects(width, height, bitmapImage.getWidth(), bitmapImage.getHeight());
+
             glBindFramebuffer(GL_FRAMEBUFFER, fboRenderer.getOldFbId());
+            glUseProgram(currProgramId);
+            drawScene();
+
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         } else {
@@ -169,16 +154,20 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     }
 
     public void setBitmapImage(Bitmap bitmapImage) {
-        this.bitmapImage = bitmapImage;
+        if (this.bitmapImage == null) {
+            this.bitmapImage = bitmapImage;
+            wasBitmapChanged = true;
+        } else {
+            if (this.bitmapImage.equals(bitmapImage)) {
+                wasBitmapChanged = false;
+            } else {
+                this.bitmapImage = bitmapImage;
+                wasBitmapChanged = true;
+            }
+        }
     }
 
     private void prepareData(int w, int h) {
-        /*float[] vertices = {
-                -1, 1, 1, 0, 0,
-                1, 1, 1, 1, 0,
-                -1, -1, 1, 0, 1,
-                1, -1, 1, 1, 1,
-        };*/
 
         float[] vertices = {
                 0, h, 1, 0, 0,
@@ -196,21 +185,22 @@ public class MyRenderer implements GLSurfaceView.Renderer {
             glDeleteTextures(1, IntBuffer.allocate(texture));
             texture = -1;
         }*/
+
         texture = TextureUtils.loadTexture(context, bitmapImage);
     }
 
     private void getLocations() {
-        aPositionLocation = glGetAttribLocation(programId, "a_Position");
-        aTextureLocation = glGetAttribLocation(programId, "a_Texture");
-        uProjMatrixLocation = glGetUniformLocation(programId, "u_ProjMatrix");
-        uModelMatrixLocation = glGetUniformLocation(programId, "u_ModelMatrix");
-        uViewMatrixLocation = glGetUniformLocation(programId, "u_ViewMatrix");
+        aPositionLocation = glGetAttribLocation(currProgramId, "a_Position");
+        aTextureLocation = glGetAttribLocation(currProgramId, "a_Texture");
+        uProjMatrixLocation = glGetUniformLocation(currProgramId, "u_ProjMatrix");
+        uModelMatrixLocation = glGetUniformLocation(currProgramId, "u_ModelMatrix");
+        uViewMatrixLocation = glGetUniformLocation(currProgramId, "u_ViewMatrix");
 
         //uncomment for another shaders
-        uTextureUnitLocation = glGetUniformLocation(programId, "u_TextureUnit");
+        //uTextureUnitLocation = glGetUniformLocation(currProgramId, "u_TextureUnit");
 
-        /*uImageTexLocation = glGetUniformLocation(programId, "u_ImageTex");
-        uMaskTexLocation = glGetUniformLocation(programId, "u_MaskTex");*/
+        uImageTexLocation = glGetUniformLocation(currProgramId, "u_ImageTex");
+        uMaskTexLocation = glGetUniformLocation(currProgramId, "u_MaskTex");
     }
 
     private void bindData() {
@@ -228,102 +218,58 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         Log.d("WHAT HAPPENS: ", "TEXTURE WAS BINDED");
 
         //uncomment for another shaders
-        glUniform1i(uTextureUnitLocation, 0);
+        //glUniform1i(uTextureUnitLocation, 0);
 
-        /*glUniform1i(uImageTexLocation, 0);
+        glUniform1i(uImageTexLocation, 0);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, fboRenderer.getFboTex());
-        glUniform1i(uMaskTexLocation, 1);*/
+        glUniform1i(uMaskTexLocation, 1);
     }
 
     private void createProgram() {
-        int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vertex_shader);
-        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.fragment_shader);
+       /* int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vertex_shader);
+        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.fragment_shader);*/
 
-        /*int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vertex_shader);
-        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.super_fragment_shader);*/
-        programId = ShaderUtils.createProgram(vertexShaderId, fragmentShaderId);
-        //glUseProgram(programId);
+        int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vertex_shader);
+        int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.super_fragment_shader);
+        maskModeProgramId = ShaderUtils.createProgram(vertexShaderId, fragmentShaderId);
+        //glUseProgram(currProgramId);
+
+        fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.super_fragment_shader_2);
+        allModeProgramId = ShaderUtils.createProgram(vertexShaderId, fragmentShaderId);
     }
 
 
     private void createProjectionMatrix(int width, int height) {
         Log.d("WhAt HaPpEnS: ", "pRoJeCtIoNs");
 
-       /* float left = -1;
-        float right = 1;
-        float bottom = -1;
-        float top = 1;
-        float near = -12;
-        float far = 12;
-
-        float ratio;
-
-        if (width > height) {
-            ratio = (float) width / height;
-            left *= ratio;
-            right *= ratio;
-        } else {
-            ratio = (float) height / width;
-            bottom *= ratio;
-            top *= ratio;
-        }
-
-        Matrix.orthoM(mProjectionMatrix, 0, left, right, bottom, top, near, far);*/
-        //Matrix.orthoM(mProjectionMatrix, 0, -width/2.0f, width/2.0f, -height/2.0f, height/2.0f, -12, 12);
         Matrix.orthoM(mProjectionMatrix, 0, 0, width, 0, height, -12, 12);
     }
 
-
-    /*private void createViewMatrix(int w, int h) {
-        float eyeX = 0;
-        float eyeY = 0;
-        float eyeZ = 7;
-
-        float centerX = 0;
-        float centerY = 0;
-        float centerZ = 0;
-
-        float upX = 0;
-        float upY = 1;
-        float upZ = 0;
-
-        Matrix.setLookAtM(mViewMatrix, 0, eyeX, eyeY, eyeZ, centerX, centerY, centerZ, upX, upY, upZ);
-        Log.d("VIEW MATRIX: ", logMatrix(mViewMatrix));
-    }*/
-
     private void createModelMatrix(int wi, int hi, int ws, int hs) {
-        float scaling = 1;
-        float wideI = (float) wi / hi;
-        float wideS = (float) ws / hs;
+        scaling = 1;
+        wideI = (float) wi / hi;
+        wideS = (float) ws / hs;
 
         Matrix.setIdentityM(mModelMatrix, 0);
 
         if (wideI > wideS) {
-            scaling *= (float) ws / wi;
+            scaling *= wideS/wideI;
             Log.d("MODEL MATRIX SCALING: ", "" + scaling);
+            Matrix.translateM(mModelMatrix, 0, 0, (hs/2.0f)*(1 - scaling), 0);
             Matrix.scaleM(mModelMatrix, 0, 1, scaling, 1);
         } else {
-            scaling *= (float) hs / hi;
+            scaling *= wideI / wideS;
             Log.d("MODEL MATRIX SCALING: ", "" + scaling);
+            Matrix.translateM(mModelMatrix, 0, (ws/2.0f)*(1 - scaling), 0, 0);
             Matrix.scaleM(mModelMatrix, 0, scaling, 1, 1);
         }
-
-        /*float overviewScale = Math.min((float) ws / wi, (float) hs / hi);
-        float translationX = ws / 2.0f - (wi / 2.0f) * overviewScale;
-        float translationY = hs / 2.0f - (hi / 2.0f) * overviewScale;
-
-        // задаем матрицу модели
-        Matrix.setIdentityM(mModelMatrix, 0);
-        Matrix.translateM(mModelMatrix, 0, translationX, translationY, 0);
-        Matrix.scaleM(mModelMatrix, 0, overviewScale, overviewScale, 1.0f);*/
     }
 
     private void bindMatrix() {
         glUniformMatrix4fv(uProjMatrixLocation, 1, false, mProjectionMatrix, 0);
         glUniformMatrix4fv(uModelMatrixLocation, 1, false, mModelMatrix, 0);
-        //glUniformMatrix4fv(uViewMatrixLocation, 1, false, mViewMatrix, 0);
     }
 
     private String logMatrix(float[] m) {
@@ -332,5 +278,54 @@ public class MyRenderer implements GLSurfaceView.Renderer {
             str += m[i] + ", ";
         }
         return str;
+    }
+
+    public void setCurrProgramId(boolean isMaskMode) {
+        if (isMaskMode == true){
+            this.currProgramId = maskModeProgramId;
+        } else {
+            this.currProgramId = allModeProgramId;
+        }
+    }
+
+    public FboRenderer getFboRenderer() {
+        return this.fboRenderer;
+    }
+
+    private void drawScene() {
+        getLocations();
+        bindData();
+        createProjectionMatrix(width, height);
+        createModelMatrix(bitmapImage.getWidth(), bitmapImage.getHeight(), width, height);
+        //createViewMatrix(width, height);
+        bindMatrix();
+    }
+
+    protected Bitmap getBitmapImage() {
+        return this.bitmapImage;
+    }
+
+    protected float getScaling() {
+        return this.scaling;
+    }
+
+    protected float getWideI() {
+        return this.wideI;
+    }
+
+    protected float getWideS() {
+        return this.wideS;
+    }
+
+    protected int getWidth() {
+        return this.width;
+    }
+
+    protected int getHeight() {
+        return this.height;
+    }
+
+    protected float[] getmModelMatrix() {
+        return this.mModelMatrix;
     }
 }

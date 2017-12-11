@@ -9,16 +9,13 @@ import android.content.pm.ConfigurationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
-import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+import android.support.annotation.RequiresApi;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.view.View.OnClickListener;
-import android.view.Window;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
@@ -27,7 +24,7 @@ import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity {
 
-    private GLSurfaceView glSurfaceView;
+    private MyGlSurfaceView glSurfaceView;
     private ImageView imageView;
 
     private Button btnOpen;
@@ -35,6 +32,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnMode;
 
     private static int REQUEST_IMAGE = 42;
+    private boolean maskMode = true;
 
     private Bitmap bitmapImage;
     private MyRenderer renderer;
@@ -43,39 +41,56 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        if(!supportES2()) {
+        if (!supportES2()) {
             Toast.makeText(this, "OpenGL ES2 is not supported", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
 
+        renderer = new MyRenderer(this);
+        glSurfaceView = new MyGlSurfaceView(this);
+
         setContentView(R.layout.activity_main);
 
         //imageView = (ImageView)findViewById(R.id.imageViewID);
 
-        btnOpen = (Button)findViewById(R.id.openButton);
-        btnSave = (Button)findViewById(R.id.saveButton);
-        btnMode = (Button)findViewById(R.id.modeButton);
+        btnOpen = (Button) findViewById(R.id.openButton);
+        btnSave = (Button) findViewById(R.id.saveButton);
+        btnMode = (Button) findViewById(R.id.modeButton);
 
-        renderer = new MyRenderer(this);
+        glSurfaceView = (MyGlSurfaceView) findViewById(R.id.glSurfaceViewID);
 
-        glSurfaceView = (GLSurfaceView)findViewById(R.id.glSurfaceViewID);
         glSurfaceView.setEGLContextClientVersion(2);
         glSurfaceView.setPreserveEGLContextOnPause(true);
         glSurfaceView.setRenderer(renderer);
         glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
 
-        OnClickListener oclBtnOpen = new OnClickListener() {
+        OnClickListener onClickButton = new OnClickListener() {
             @Override
             public void onClick(View view) {
-                //requestReadPermissions();
-                Intent intent = new Intent(Intent.ACTION_PICK);
-                intent.setType("image/*");
-                startActivityForResult(intent, REQUEST_IMAGE);
+                switch (view.getId()) {
+                    case R.id.openButton:
+                        requestReadPermissions();
+                        Intent intent = new Intent(Intent.ACTION_PICK);
+                        intent.setType("image/*");
+                        startActivityForResult(intent, REQUEST_IMAGE);
+                        break;
+
+                    case R.id.saveButton:
+                        // TODO: 09.12.17 сохранение
+                        break;
+                    case R.id.modeButton:
+                        maskMode = !maskMode;
+                        renderer.setCurrProgramId(maskMode);
+                        glSurfaceView.requestRender();
+                        break;
+                }
             }
         };
 
-        btnOpen.setOnClickListener(oclBtnOpen);
+        btnOpen.setOnClickListener(onClickButton);
+        btnSave.setOnClickListener(onClickButton);
+        btnMode.setOnClickListener(onClickButton);
 
         glSurfaceView.requestRender();
     }
@@ -104,20 +119,19 @@ public class MainActivity extends AppCompatActivity {
                         bitmapImage = MediaStore.Images.Media.getBitmap(this.getContentResolver(), imageUri);
                         //imageView.setImageBitmap(bitmapImage);
                         renderer.setBitmapImage(bitmapImage);
+                        maskMode = true;
+                        renderer.setCurrProgramId(maskMode);
                     } catch (IOException e) {
                         Toast.makeText(this, "Invalid image", Toast.LENGTH_LONG).show();
                         e.printStackTrace();
                     }
-                }
-                else {
+                } else {
                     Toast.makeText(this, "NullDataError", Toast.LENGTH_LONG).show();
                 }
-            }
-            else {
+            } else {
                 Toast.makeText(this, "Sorry, can't load image :c", Toast.LENGTH_LONG).show();
             }
-        }
-        else {
+        } else {
             //smth for another request
         }
 
@@ -132,8 +146,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @TargetApi(23)
-    public void requestReadPermissions(){
-        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED){
+    public void requestReadPermissions() {
+        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
         }
     }

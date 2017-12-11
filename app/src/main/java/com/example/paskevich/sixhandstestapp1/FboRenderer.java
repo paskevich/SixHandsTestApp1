@@ -18,6 +18,9 @@ import static android.opengl.GLES20.GL_FRAGMENT_SHADER;
 import static android.opengl.GLES20.GL_FRAMEBUFFER;
 import static android.opengl.GLES20.GL_FRAMEBUFFER_BINDING;
 import static android.opengl.GLES20.GL_LINEAR;
+import static android.opengl.GLES20.GL_LINES;
+import static android.opengl.GLES20.GL_LINE_LOOP;
+import static android.opengl.GLES20.GL_LINE_STRIP;
 import static android.opengl.GLES20.GL_RENDERBUFFER;
 import static android.opengl.GLES20.GL_RENDERBUFFER_BINDING;
 import static android.opengl.GLES20.GL_RGBA;
@@ -27,6 +30,7 @@ import static android.opengl.GLES20.GL_TEXTURE_MAG_FILTER;
 import static android.opengl.GLES20.GL_TEXTURE_MIN_FILTER;
 import static android.opengl.GLES20.GL_TEXTURE_WRAP_S;
 import static android.opengl.GLES20.GL_TEXTURE_WRAP_T;
+import static android.opengl.GLES20.GL_TRIANGLES;
 import static android.opengl.GLES20.GL_TRIANGLE_STRIP;
 import static android.opengl.GLES20.GL_UNSIGNED_BYTE;
 import static android.opengl.GLES20.GL_VERTEX_SHADER;
@@ -43,6 +47,7 @@ import static android.opengl.GLES20.glGenTextures;
 import static android.opengl.GLES20.glGetAttribLocation;
 import static android.opengl.GLES20.glGetIntegerv;
 import static android.opengl.GLES20.glGetUniformLocation;
+import static android.opengl.GLES20.glLineWidth;
 import static android.opengl.GLES20.glTexImage2D;
 import static android.opengl.GLES20.glTexParameteri;
 import static android.opengl.GLES20.glUniform4f;
@@ -67,6 +72,12 @@ public class FboRenderer {
     private float[] mProjectionMatrix = new float[16];
     private float[] mModelMatrix = new float[16];
 
+    private final float TOUCH_SCALE_FACTOR = 180.0f/270;
+    private final int TRIANGLE = 30;
+    private final int SQUARE = 40;
+    private final int NOTHING = 0;
+    private int choosenObject;
+
     public FboRenderer(Context context){
         this.context = context;
     }
@@ -76,6 +87,7 @@ public class FboRenderer {
     private Bitmap bitmapFBO;
 
     private FloatBuffer squareVertData;
+    private FloatBuffer triangleVertData;
     private FloatBuffer texVertData;
 
     private int texFbo = -1;
@@ -88,7 +100,25 @@ public class FboRenderer {
     //private int uViewMatrixLocation;
     private int uColorLocation;
 
-    protected void fboInit(int fboWidth, int fboHeight) {
+    private final float[] squareVert = {
+            0f, 300f, 1,
+            0f, 0f, 1,
+            300f, 300f, 1,
+            300f, 0f, 1,
+    };
+
+    private final float[] triangleVert = {
+            500f, 800f, 1,
+            800f, 800f, 1,
+            650f, 540f, 1,
+    };
+
+    private float[] cloneSquareVert;
+    private float[] cloneTriangleVert;
+
+    protected void fboInit(int ws, int hs) {
+
+        Log.d("tyui", "fboInit: ");
 
         int[] tmp = new int[1];
 
@@ -118,7 +148,7 @@ public class FboRenderer {
         glBindTexture(GL_TEXTURE_2D, fboTex);
 
         //Define texture parameters
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, fboWidth, fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ws, hs, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -129,14 +159,10 @@ public class FboRenderer {
 
         createProgram();
         glUseProgram(programId);
+        cloneSquareVert = squareVert.clone();
+        cloneTriangleVert = triangleVert.clone();
         prepFBO();
         getLocations();
-        createProjectionMatrix(fboWidth, fboHeight);
-        //createModelMatrix(fbo);
-        bindFboData();
-        bindMatrix();
-        glClear(GL_COLOR_BUFFER_BIT);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
         //changing to old
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -145,31 +171,33 @@ public class FboRenderer {
     }
 
     protected void prepFBO() {
-        float[] squareVert = {
-                -0.2f, 0.2f, 1,
-                -0.2f, -0.2f, 1,
-                0.2f, 0.2f, 1,
-                0.2f, -0.2f, 1,
-        };
-
-        float[] texVert = {
+      /*  float[] texVert = {
                 0, 0,
                 1, 0,
                 0, 1,
                 1, 1,
-        };
+        };*/
+
+        Log.d("tyui", "prepFBO: ");
 
         squareVertData = ByteBuffer
-                .allocateDirect(squareVert.length*4)
+                .allocateDirect(cloneSquareVert.length*4)
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
-        squareVertData.put(squareVert);
+        squareVertData.put(cloneSquareVert);
 
-        texVertData = ByteBuffer
+        triangleVertData = ByteBuffer
+                .allocateDirect(cloneTriangleVert.length*4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer();
+        triangleVertData.put(cloneTriangleVert);
+
+        /*texVertData = ByteBuffer
                 .allocateDirect(texVert.length*4)
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
-        texVertData.put(texVert);
+        texVertData.put(texVert);*/
+
         /*if (texFbo != -1) {
             glDeleteTextures(1, IntBuffer.allocate(texFbo));
         }*/
@@ -187,9 +215,9 @@ public class FboRenderer {
         uColorLocation = glGetUniformLocation(this.programId, "u_Color");
     }
 
-    protected void bindFboData() {
-        squareVertData.position(0);
-        glVertexAttribPointer(aPositionLocation, 3, GL_FLOAT, false, 0, squareVertData);
+    protected void bindFboData(FloatBuffer objectData) {
+        objectData.position(0);
+        glVertexAttribPointer(aPositionLocation, 3, GL_FLOAT, false, 0, objectData);
         glEnableVertexAttribArray(aPositionLocation);
 
         glUniform4f(uColorLocation, 1.0f, 0.0f, 0.0f, 1.0f);
@@ -213,26 +241,7 @@ public class FboRenderer {
     }
 
     protected void createProjectionMatrix(int width, int height) {
-        float left = -1;
-        float right = 1;
-        float bottom = -1;
-        float top = 1;
-        float near = -12;
-        float far = 12;
-
-        float ratio;
-
-        if (width > height) {
-            ratio = (float) width / height;
-            left *= ratio;
-            right *= ratio;
-        } else {
-            ratio = (float) height / width;
-            bottom *= ratio;
-            top *= ratio;
-        }
-
-        Matrix.orthoM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
+        Matrix.orthoM(mProjectionMatrix, 0, 0, width, 0, height, -12, 12);
     }
 
     private void createModelMatrix(int wi, int hi, int ws, int hs) {
@@ -243,19 +252,21 @@ public class FboRenderer {
         Matrix.setIdentityM(mModelMatrix, 0);
 
         if (wideI > wideS) {
-            scaling *= (float) hi / wi;
+            scaling *= wideS/wideI;
             Log.d("MODEL MATRIX SCALING: ", "" + scaling);
+            //Matrix.translateM(mModelMatrix, 0, 0, (hs/2.0f)*(1 - scaling), 0);
             Matrix.scaleM(mModelMatrix, 0, 1, scaling, 1);
         } else {
-            scaling *= (float) wi / hi;
+            scaling *= (float) wideI / wideS;
             Log.d("MODEL MATRIX SCALING: ", "" + scaling);
+            //Matrix.translateM(mModelMatrix, 0, (ws/2.0f)*(1 - scaling), 0, 0);
             Matrix.scaleM(mModelMatrix, 0, scaling, 1, 1);
         }
     }
 
     private void bindMatrix() {
         glUniformMatrix4fv(uProjMatrixLocation, 1, false, mProjectionMatrix, 0);
-        //glUniformMatrix4fv(uModelMatrixLocation, 1, false, mModelMatrix, 0);
+        glUniformMatrix4fv(uModelMatrixLocation, 1, false, mModelMatrix, 0);
     }
 
     public int getOldFbId() {
@@ -280,5 +291,84 @@ public class FboRenderer {
 
     public int getProgramId() {
         return this.programId;
+    }
+
+    public boolean moveObject(float x, float y, float prevX, float prevY) {
+
+        if(choosenObject == NOTHING) {
+            return false;
+        }
+
+        float dx = x - prevX;
+        float dy = y - prevY;
+
+        if (choosenObject == SQUARE) {
+            for (int i = 0; i < cloneSquareVert.length; i += 3) {
+                cloneSquareVert[i] += dx * TOUCH_SCALE_FACTOR;
+                cloneSquareVert[i + 1] += dy * TOUCH_SCALE_FACTOR;
+            }
+            squareVertData = ByteBuffer
+                    .allocateDirect(cloneSquareVert.length * 4)
+                    .order(ByteOrder.nativeOrder())
+                    .asFloatBuffer();
+            squareVertData.put(cloneSquareVert);
+        }
+
+        if (choosenObject == TRIANGLE) {
+            for (int i = 0; i < cloneTriangleVert.length; i += 3) {
+                cloneTriangleVert[i] += dx * TOUCH_SCALE_FACTOR;
+                cloneTriangleVert[i + 1] += dy * TOUCH_SCALE_FACTOR;
+            }
+            triangleVertData = ByteBuffer
+                    .allocateDirect(cloneTriangleVert.length * 4)
+                    .order(ByteOrder.nativeOrder())
+                    .asFloatBuffer();
+            triangleVertData.put(cloneTriangleVert);
+        }
+
+        return true;
+    }
+
+    protected void drawObjects(int ws, int hs, int wi, int hi) {
+        glUseProgram(programId);
+        createProjectionMatrix(ws, hs);
+        createModelMatrix(ws, hs, wi, hi);
+        bindFboData(squareVertData);
+        bindMatrix();
+
+        // TODO: 11.12.17 границы фигур черным
+        glLineWidth(6);
+
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glUniform4f(uColorLocation, 0, 1, 0, 1);
+        glDrawArrays(GL_LINE_LOOP , 0, 4);
+
+        bindFboData(triangleVertData);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glUniform4f(uColorLocation, 0, 1, 0, 1);
+        glDrawArrays(GL_LINE_LOOP, 0, 3);
+    }
+
+    public void setObject(float x, float y) {
+
+        if (x > cloneSquareVert[0]
+                && x < cloneSquareVert[6]
+                && y > cloneSquareVert[4]
+                && y < cloneSquareVert[7]) {
+
+            choosenObject = SQUARE;
+
+        } else {
+            if (x > cloneTriangleVert[0]
+                    && x < cloneTriangleVert[3]
+                    && y > cloneTriangleVert[7]
+                    && y < cloneTriangleVert[4]) {
+
+                choosenObject = TRIANGLE;
+            } else {
+                choosenObject = NOTHING;
+            }
+        }
     }
 }
